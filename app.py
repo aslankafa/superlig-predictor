@@ -4,16 +4,27 @@ import numpy as np
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 
-# Veri yükleme
+# Veriyi yükle
 @st.cache_data
 def load_data():
     df = pd.read_csv("bundesliga_matches_2020_2024.csv")
+    df = df.rename(columns={
+        df.columns[1]: "Date",
+        df.columns[3]: "HomeTeam",
+        df.columns[4]: "AwayTeam",
+        df.columns[5]: "FTHG",
+        df.columns[6]: "FTAG",
+        df.columns[7]: "FTR"
+    })
     df = df[['Date', 'HomeTeam', 'AwayTeam', 'FTHG', 'FTAG', 'FTR']]
     df.dropna(inplace=True)
-    df['Date'] = pd.to_datetime(df['Date'], dayfirst=True, errors='coerce')
-    df = df.dropna(subset=['Date'])  # geçersiz tarihleri temizle
+    df['Date'] = pd.to_datetime(df['Date'])
     df.sort_values('Date', inplace=True)
-    df['Result'] = df['FTR'].map({'H': 'Home Win', 'D': 'Draw', 'A': 'Away Win'})
+    df['Result'] = df['FTR'].map({
+        'HOME_TEAM': 'Home Win',
+        'DRAW': 'Draw',
+        'AWAY_TEAM': 'Away Win'
+    })
     return df
 
 # Özellik mühendisliği
@@ -41,10 +52,10 @@ def feature_engineering(df):
             'AwayWinsLast5': away_form.count('W')
         })
 
-        if row['FTR'] == 'H':
+        if row['Result'] == 'Home Win':
             team_form.setdefault(home, []).append('W')
             team_form.setdefault(away, []).append('L')
-        elif row['FTR'] == 'A':
+        elif row['Result'] == 'Away Win':
             team_form.setdefault(home, []).append('L')
             team_form.setdefault(away, []).append('W')
         else:
@@ -67,7 +78,6 @@ def feature_engineering(df):
     df['AwayAvgGoals'] = df['AwayTeam'].map(avg_goals)
     return df
 
-# Model eğitimi
 @st.cache_resource
 def train_model(df):
     features = ['HomePointsLast5', 'AwayPointsLast5', 'HomeWinsLast5', 'AwayWinsLast5', 'HomeAvgGoals', 'AwayAvgGoals']
@@ -78,7 +88,6 @@ def train_model(df):
     model.fit(X_train, y_train)
     return model, X_test, y_test
 
-# Ana uygulama
 def main():
     st.title("Bundesliga Match Outcome Predictor (2020–2024)")
     st.write("Bundesliga 2020–2024 sezonu verilerine dayalı olarak maç sonucu tahmin edebilirsiniz.")
@@ -87,15 +96,15 @@ def main():
     df = feature_engineering(df)
     model, X_test, y_test = train_model(df)
 
-    st.subheader("Model Accuracy on Test Data")
+    st.subheader("Model Doğruluk Oranı")
     y_pred = model.predict(X_test)
     acc = (y_pred == y_test).mean()
     st.write(f"Accuracy: {acc:.2%}")
 
-    st.subheader("Predict a New Match")
+    st.subheader("Yeni Bir Maç Tahmini")
     teams = sorted(pd.unique(df[['HomeTeam', 'AwayTeam']].values.ravel()))
-    home_team = st.selectbox("Select Home Team", teams)
-    away_team = st.selectbox("Select Away Team", [t for t in teams if t != home_team])
+    home_team = st.selectbox("Ev Sahibi Takım", teams)
+    away_team = st.selectbox("Deplasman Takımı", [t for t in teams if t != home_team])
 
     def get_team_features(team):
         recent = df[(df['HomeTeam'] == team) | (df['AwayTeam'] == team)].tail(5)
@@ -103,16 +112,16 @@ def main():
         wins = 0
         for _, r in recent.iterrows():
             if r['HomeTeam'] == team:
-                if r['FTR'] == 'H':
+                if r['Result'] == 'Home Win':
                     wins += 1
                     points += 3
-                elif r['FTR'] == 'D':
+                elif r['Result'] == 'Draw':
                     points += 1
             else:
-                if r['FTR'] == 'A':
+                if r['Result'] == 'Away Win':
                     wins += 1
                     points += 3
-                elif r['FTR'] == 'D':
+                elif r['Result'] == 'Draw':
                     points += 1
         return points, wins
 
@@ -136,9 +145,9 @@ def main():
         'AwayAvgGoals': a_avg_goals
     }])
 
-    if st.button("Predict Outcome"):
+    if st.button("Maçı Tahmin Et"):
         prediction = model.predict(input_data)[0]
-        st.write(f"### Predicted Match Result: {prediction}")
+        st.write(f"### Tahmin Edilen Maç Sonucu: {prediction}")
 
 if __name__ == "__main__":
     main()
