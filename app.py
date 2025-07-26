@@ -4,23 +4,24 @@ import numpy as np
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 
-# Bundesliga verilerini yükle
+# Veri yükleme
 @st.cache_data
 def load_data():
-    df = pd.read_csv("bundesliga-matches-2020-2024.csv")
+    df = pd.read_csv("bundesliga_matches_2020_2024.csv")
+    df = df[['Date', 'HomeTeam', 'AwayTeam', 'FTHG', 'FTAG', 'FTR']]
     df.dropna(inplace=True)
     df['Date'] = pd.to_datetime(df['Date'], dayfirst=True, errors='coerce')
-    df = df.dropna(subset=['Date'])  # Geçersiz tarihleri temizle
+    df = df.dropna(subset=['Date'])  # geçersiz tarihleri temizle
     df.sort_values('Date', inplace=True)
     df['Result'] = df['FTR'].map({'H': 'Home Win', 'D': 'Draw', 'A': 'Away Win'})
     return df
 
-# Özellik mühendisliği (takımların form durumu, galibiyet sayısı, gol ortalamaları)
+# Özellik mühendisliği
 def feature_engineering(df):
     team_form = {}
     features = []
 
-    for _, row in df.iterrows():
+    for i, row in df.iterrows():
         home = row['HomeTeam']
         away = row['AwayTeam']
 
@@ -51,7 +52,7 @@ def feature_engineering(df):
             team_form.setdefault(away, []).append('D')
 
     features_df = pd.DataFrame(features)
-    df = df.reset_index(drop=True)
+    df.reset_index(drop=True, inplace=True)
     df = pd.concat([df, features_df], axis=1)
 
     teams = pd.unique(df[['HomeTeam', 'AwayTeam']].values.ravel())
@@ -66,7 +67,7 @@ def feature_engineering(df):
     df['AwayAvgGoals'] = df['AwayTeam'].map(avg_goals)
     return df
 
-# RandomForest modelini eğit
+# Model eğitimi
 @st.cache_resource
 def train_model(df):
     features = ['HomePointsLast5', 'AwayPointsLast5', 'HomeWinsLast5', 'AwayWinsLast5', 'HomeAvgGoals', 'AwayAvgGoals']
@@ -77,6 +78,7 @@ def train_model(df):
     model.fit(X_train, y_train)
     return model, X_test, y_test
 
+# Ana uygulama
 def main():
     st.title("Bundesliga Match Outcome Predictor (2020–2024)")
     st.write("Bundesliga 2020–2024 sezonu verilerine dayalı olarak maç sonucu tahmin edebilirsiniz.")
@@ -90,7 +92,6 @@ def main():
     acc = (y_pred == y_test).mean()
     st.write(f"Accuracy: {acc:.2%}")
 
-    # Kullanıcıdan maç bilgisi al
     st.subheader("Predict a New Match")
     teams = sorted(pd.unique(df[['HomeTeam', 'AwayTeam']].values.ravel()))
     home_team = st.selectbox("Select Home Team", teams)
