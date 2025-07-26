@@ -4,34 +4,23 @@ import numpy as np
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 
-# Veri yükleme: geçmiş Süper Lig sezonlarının verilerini indiriyoruz
+# Bundesliga verilerini yükle
 @st.cache_data
 def load_data():
-    urls = {
-        "2021-22": "https://www.football-data.co.uk/mmz4281/2122/TUR.csv",
-        "2022-23": "https://www.football-data.co.uk/mmz4281/2223/TUR.csv",
-        "2023-24": "https://www.football-data.co.uk/mmz4281/2324/TUR.csv"
-    }
-    columns = ['Date', 'HomeTeam', 'AwayTeam', 'FTHG', 'FTAG', 'FTR']
-    dfs = []
-    for season, url in urls.items():
-        df = pd.read_csv(url)
-        df = df[columns]
-        df['Season'] = season
-        dfs.append(df)
-    df_all = pd.concat(dfs)
-    df_all.dropna(inplace=True)
-    df_all['Date'] = pd.to_datetime(df_all['Date'], dayfirst=True)
-    df_all.sort_values('Date', inplace=True)
-    df_all['Result'] = df_all['FTR'].map({'H': 'Home Win', 'D': 'Draw', 'A': 'Away Win'})
-    return df_all
+    df = pd.read_csv("bundesliga-matches-2020-2024.csv")
+    df.dropna(inplace=True)
+    df['Date'] = pd.to_datetime(df['Date'], dayfirst=True, errors='coerce')
+    df = df.dropna(subset=['Date'])  # Geçersiz tarihleri temizle
+    df.sort_values('Date', inplace=True)
+    df['Result'] = df['FTR'].map({'H': 'Home Win', 'D': 'Draw', 'A': 'Away Win'})
+    return df
 
-# Özellik mühendisliği: takımların son formu ve ortalama golleri hesaplanıyor
+# Özellik mühendisliği (takımların form durumu, galibiyet sayısı, gol ortalamaları)
 def feature_engineering(df):
     team_form = {}
     features = []
 
-    for i, row in df.iterrows():
+    for _, row in df.iterrows():
         home = row['HomeTeam']
         away = row['AwayTeam']
 
@@ -62,7 +51,7 @@ def feature_engineering(df):
             team_form.setdefault(away, []).append('D')
 
     features_df = pd.DataFrame(features)
-    df.reset_index(drop=True, inplace=True)
+    df = df.reset_index(drop=True)
     df = pd.concat([df, features_df], axis=1)
 
     teams = pd.unique(df[['HomeTeam', 'AwayTeam']].values.ravel())
@@ -77,7 +66,7 @@ def feature_engineering(df):
     df['AwayAvgGoals'] = df['AwayTeam'].map(avg_goals)
     return df
 
-# Model eğitimi: RandomForest ile sonuç tahmini
+# RandomForest modelini eğit
 @st.cache_resource
 def train_model(df):
     features = ['HomePointsLast5', 'AwayPointsLast5', 'HomeWinsLast5', 'AwayWinsLast5', 'HomeAvgGoals', 'AwayAvgGoals']
@@ -89,8 +78,8 @@ def train_model(df):
     return model, X_test, y_test
 
 def main():
-    st.title("Turkish Süper Lig Match Outcome Predictor")
-    st.write("Geçmiş verilere dayanarak maç sonucu tahmin edebilirsiniz.")
+    st.title("Bundesliga Match Outcome Predictor (2020–2024)")
+    st.write("Bundesliga 2020–2024 sezonu verilerine dayalı olarak maç sonucu tahmin edebilirsiniz.")
 
     df = load_data()
     df = feature_engineering(df)
@@ -111,7 +100,7 @@ def main():
         recent = df[(df['HomeTeam'] == team) | (df['AwayTeam'] == team)].tail(5)
         points = 0
         wins = 0
-        for idx, r in recent.iterrows():
+        for _, r in recent.iterrows():
             if r['HomeTeam'] == team:
                 if r['FTR'] == 'H':
                     wins += 1
